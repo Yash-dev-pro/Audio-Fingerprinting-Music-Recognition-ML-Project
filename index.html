@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Music Recognizer</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            background: #1e1e1e;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            width: 350px;
+        }
+        h1 { margin-bottom: 10px; font-weight: 500; }
+        p { color: #aaaaaa; margin-bottom: 30px; font-size: 14px; }
+        
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #listen-btn {
+            background-color: #bb86fc;
+            color: #000000;
+            border: none;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(187, 134, 252, 0.4);
+        }
+        #listen-btn:hover { background-color: #9d4edd; transform: scale(1.02); }
+        #listen-btn.recording { background-color: #cf6679; animation: pulse 1.5s infinite; }
+        
+        #upload-btn {
+            background-color: transparent;
+            color: #03dac6;
+            border: 2px solid #03dac6;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #upload-btn:hover { background-color: rgba(3, 218, 198, 0.1); }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(207, 102, 121, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(207, 102, 121, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(207, 102, 121, 0); }
+        }
+
+        #status { margin-top: 25px; font-size: 16px; font-weight: bold; min-height: 20px; color: #aaaaaa; }
+        #result-box { color: #bb86fc; margin-top: 15px; font-size: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Music Recognizer</h1>
+        <p>Powered by Neural Audio Fingerprinting</p>
+        
+        <div class="btn-group">
+            <button id="listen-btn">🎙️ Tap to Listen</button>
+            <button id="upload-btn">📁 Upload MP3/WAV</button>
+            <input type="file" id="file-input" accept="audio/*" style="display: none;">
+        </div>
+        
+        <div id="status"></div>
+        <div id="result-box"></div>
+    </div>
+
+    <script>
+        const listenBtn = document.getElementById('listen-btn');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-input');
+        const statusText = document.getElementById('status');
+        const resultBox = document.getElementById('result-box');
+        
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // --- UPLOAD LOGIC ---
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click(); // Opens the file browser
+        });
+
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            statusText.innerText = `Analyzing '${file.name}'...`;
+            resultBox.innerText = "";
+            
+            const formData = new FormData();
+            formData.append("file", file, file.name);
+
+            try {
+                const response = await fetch("http://127.0.0.1:8000/identify", {
+                    method: "POST",
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === "success") {
+                    statusText.innerText = "Analysis Complete!";
+                    resultBox.innerText = data.result;
+                } else {
+                    statusText.innerText = "Error analyzing audio.";
+                    resultBox.innerText = data.message;
+                }
+            } catch (err) {
+                statusText.innerText = "Server connection failed. Is FastAPI running?";
+            }
+            
+            fileInput.value = ""; // Reset the input so you can upload the same file again if needed
+        });
+
+        // --- MIC LOGIC (Same as before) ---
+        listenBtn.addEventListener('click', async () => {
+            if (listenBtn.classList.contains('recording')) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.start();
+                listenBtn.classList.add('recording');
+                listenBtn.innerText = "Listening...";
+                statusText.innerText = "Capturing audio for 5 seconds...";
+                resultBox.innerText = "";
+                audioChunks = [];
+
+                mediaRecorder.addEventListener("dataavailable", event => {
+                    audioChunks.push(event.data);
+                });
+
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 5000);
+
+                mediaRecorder.addEventListener("stop", async () => {
+                    listenBtn.classList.remove('recording');
+                    listenBtn.innerText = "🎙️ Tap to Listen";
+                    statusText.innerText = "Analyzing acoustic fingerprint...";
+                    
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const formData = new FormData();
+                    formData.append("file", audioBlob, "recording.webm");
+
+                    try {
+                        const response = await fetch("http://127.0.0.1:8000/identify", {
+                            method: "POST",
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.status === "success") {
+                            statusText.innerText = "Analysis Complete!";
+                            resultBox.innerText = data.result;
+                        } else {
+                            statusText.innerText = "Error analyzing audio.";
+                            resultBox.innerText = data.message;
+                        }
+                    } catch (err) {
+                        statusText.innerText = "Server connection failed.";
+                    }
+                    
+                    stream.getTracks().forEach(track => track.stop());
+                });
+
+            } catch (err) {
+                statusText.innerText = "Microphone access denied.";
+            }
+        });
+    </script>
+</body>
+</html>
