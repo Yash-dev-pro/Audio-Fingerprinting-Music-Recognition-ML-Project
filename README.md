@@ -26,7 +26,7 @@ OptiTune is a modern, deep metric learning-powered audio fingerprinting and musi
 
 ### 2. Clone the Repository
 ```bash
-git clone https://github.com/rishabh0456/Audio-Fingerprinting-Music-Recognition-ML-Project.git
+git clone https://github.com/yash-dev-pro/Audio-Fingerprinting-Music-Recognition-ML-Project.git
 cd Audio-Fingerprinting-Music-Recognition-ML-Project
 ```
 
