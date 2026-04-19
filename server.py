@@ -41,6 +41,17 @@ def get_library():
     except Exception as e:
         return {"status": "error", "message": str(e), "files": []}
 
+@app.post("/rescan")
+def rescan_library():
+    try:
+        success = build_database()
+        if success:
+            return {"status": "success", "message": "Library rescanned successfully."}
+        else:
+            return {"status": "error", "message": "Failed to rebuild database."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/audio/{filename}")
 def get_audio(filename: str):
     file_path = os.path.join("music_library", filename)

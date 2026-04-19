@@ -8,30 +8,34 @@ warnings.filterwarnings('ignore')
 
 DATABASE = []
 
+import scipy.signal
+
 def extract_vector(y, sr):
-    """The Ultimate Feature Extractor: Filters noise, normalizes volume, extracts melody."""
-    
-    # 1. NOISE FILTER: Applies a pre-emphasis filter to boost the actual song and kill background hum
-    y = librosa.effects.preemphasis(y)
-    
-    # 2. VOLUME NORMALIZER: Forces the mic recording to match the exact volume of the MP3
     y = librosa.util.normalize(y)
     
-    # 3. TEXTURE (MFCC): Reduced to 40 features to ignore generic noise
-    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-    mfccs_mean = np.mean(mfccs[1:].T, axis=0) # [1:] Drops the raw volume metric
+    # 1. EXPLICIT NOISE FILTERING STAGE:
+    # Remove laptop fan rumbles (under 300Hz) and high-pitch static/hiss (over 3400Hz)
+    b, a = scipy.signal.butter(4, [300 / (sr / 2), 3400 / (sr / 2)], btype='bandpass')
+    y_filtered = scipy.signal.filtfilt(b, a, y)
     
-    # 4. MELODY (Chroma): Listens strictly to the musical notes (A, B, C, D)
-    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-    chroma_mean = np.mean(chroma.T, axis=0)
+    # Apply pre-emphasis to further crush ambient background hum
+    y_clean = librosa.effects.preemphasis(y_filtered)
     
-    # 5. MATHEMATICAL SCALING: Merges them and scales the vector to prevent false overlaps
-    fingerprint = np.concatenate((mfccs_mean, chroma_mean))
-    norm = np.linalg.norm(fingerprint)
-    if norm > 0:
-        fingerprint = fingerprint / norm
+    # 2. MELODY RECOGNITION:
+    # Now that the noise is filtered out, we extract the pure musical notes
+    try:
+        chroma = librosa.feature.chroma_stft(y=y_clean, sr=sr)
+        blocks = np.array_split(chroma, 5, axis=1)
+        means = [np.mean(b, axis=1) for b in blocks]
         
-    return fingerprint
+        fingerprint = np.concatenate(means)
+        norm = np.linalg.norm(fingerprint)
+        if norm > 0:
+            fingerprint = fingerprint / norm
+            
+        return fingerprint
+    except:
+        return None
 
 def build_database(music_folder="music_library"):
     print(f"\nBuilding Noise-Resistant Database from '{music_folder}'...")
@@ -49,7 +53,6 @@ def build_database(music_folder="music_library"):
             try:
                 y, sr = librosa.load(filepath, sr=22050)
                 chunk_length_samples = 5 * sr 
-                
                 # Slice the 3-minute song into searchable 5-second chunks
                 for i in range(0, len(y), chunk_length_samples):
                     y_chunk = y[i : i + chunk_length_samples]
@@ -98,10 +101,9 @@ def identify_song(query_audio_path):
                     highest_score = score
                     best_match = item["song"]
 
-    if highest_score == -1:
+    if highest_score < 0.85:
         return "No audible match found."
 
-    match_percentage = round(highest_score * 100, 2)
+    match_percentage = highest_score * 100
     
-    # It will ALWAYS return the absolute best match it found out of your 3 songs
-    return f"Match Found: {best_match} (Confidence: {match_percentage}%)"
+    return f"Match Found: {best_match} (Confidence: {match_percentage:.2f}%)"

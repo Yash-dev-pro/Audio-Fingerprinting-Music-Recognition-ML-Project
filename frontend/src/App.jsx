@@ -139,7 +139,13 @@ function App() {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: false,
+          autoGainControl: false,
+          noiseSuppression: false
+        } 
+      });
       mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
 
@@ -214,7 +220,16 @@ function App() {
               onClick={handleMicClick}
               title="Tap to identify"
             >
-              <i className={`fa-solid ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>
+              {isRecording ? (
+                <div className="listening-animation">
+                  <div className="listen-bar"></div>
+                  <div className="listen-bar"></div>
+                  <div className="listen-bar"></div>
+                  <div className="listen-bar"></div>
+                </div>
+              ) : (
+                <i className="fa-solid fa-microphone"></i>
+              )}
             </button>
             
             <div className="status-text">{status}</div>
@@ -235,7 +250,30 @@ function App() {
       </header>
       ) : (
       <section className="library-section">
-        <h2 className="section-title">My Library Tracks</h2>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+          <h2 className="section-title" style={{margin: 0}}>My Library Tracks</h2>
+          <button 
+            className="upload-btn" 
+            style={{padding: '8px 16px', fontSize: '14px', margin: 0}}
+            id="rescan-btn"
+            onClick={async () => {
+              const btn = document.getElementById('rescan-btn');
+              const prev = btn.innerHTML;
+              btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning...';
+              try {
+                await fetch('http://127.0.0.1:8000/rescan', { method: 'POST' });
+                const res = await fetch('http://127.0.0.1:8000/library');
+                const data = await res.json();
+                if (data.status === 'success') setLibrarySongs(data.files);
+              } catch (e) {
+                console.error(e);
+              }
+              btn.innerHTML = prev;
+            }}
+          >
+            <i className="fa-solid fa-rotate-right"></i> Rescan
+          </button>
+        </div>
         <div className="tiles-grid">
           {librarySongs.length === 0 ? (
             <p className="status-text">No tracks found in the library.</p>
